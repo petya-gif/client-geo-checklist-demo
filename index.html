@@ -1,0 +1,945 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GEO Visibility Tracker</title>
+<meta name="description" content="Track brand mentions and citations across AI search engines and audit GEO readiness per client.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f46e5'/%3E%3Ccircle cx='16' cy='16' r='7' fill='none' stroke='white' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='white'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#f5f6fa;--surface:#ffffff;--surface-2:#f0f2f8;--border:#e2e6ef;--border-strong:#cfd5e2;
+  --text:#0f172a;--muted:#5b6478;--faint:#8a93a8;
+  --accent:#4f46e5;--accent-hover:#4338ca;--accent-soft:#eef0ff;--on-accent:#ffffff;
+  --mention:#4f46e5;--cited:#0d9488;--good:#0f8a5f;--good-soft:#e6f6ef;--warn:#b26a00;--warn-soft:#fff4e0;--bad:#c93a3a;--bad-soft:#fdecec;
+  --shadow:0 1px 2px rgba(15,23,42,.05),0 4px 16px rgba(15,23,42,.05);
+  --radius:14px;--radius-sm:9px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b1020;--surface:#121a2e;--surface-2:#18223b;--border:#243150;--border-strong:#33426a;
+    --text:#e7eaf3;--muted:#a1abc4;--faint:#74809e;
+    --accent:#8b8df9;--accent-hover:#a3a5fb;--accent-soft:#1f2552;--on-accent:#0b1020;
+    --mention:#8b8df9;--cited:#2dd4bf;--good:#3ccf91;--good-soft:#123327;--warn:#f0b04a;--warn-soft:#3a2a10;--bad:#f07272;--bad-soft:#3d1a1d;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b1020;--surface:#121a2e;--surface-2:#18223b;--border:#243150;--border-strong:#33426a;
+  --text:#e7eaf3;--muted:#a1abc4;--faint:#74809e;
+  --accent:#8b8df9;--accent-hover:#a3a5fb;--accent-soft:#1f2552;--on-accent:#0b1020;
+  --mention:#8b8df9;--cited:#2dd4bf;--good:#3ccf91;--good-soft:#123327;--warn:#f0b04a;--warn-soft:#3a2a10;--bad:#f07272;--bad-soft:#3d1a1d;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0;line-height:1.25;letter-spacing:-.01em}
+h2{font-size:20px}h3{font-size:15px}
+.wrap{max-width:1240px;margin:0 auto;padding:0 24px}
+.muted{color:var(--muted)}.small{font-size:13px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* Top bar */
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20}
+.topbar .wrap{display:flex;align-items:center;gap:12px;min-height:64px;flex-wrap:wrap;padding-top:10px;padding-bottom:10px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:650;font-size:16px;margin-right:auto;white-space:nowrap}
+.brand svg{flex:none}
+.brand small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+.btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border-strong);background:var(--surface);border-radius:var(--radius-sm);padding:7px 12px;cursor:pointer;font-size:14px;font-weight:550;line-height:1.2;white-space:nowrap;transition:background .15s,border-color .15s}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:5px 9px;font-size:13px}
+.btn.icon{padding:7px;width:36px;justify-content:center}
+.btn svg{width:16px;height:16px;flex:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+select,input[type=text],input[type=url],input[type=date],input[type=number],textarea{background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius-sm);padding:7px 10px;min-width:0;max-width:100%}
+textarea{width:100%;resize:vertical;min-height:70px}
+.client-select{font-weight:600;min-width:180px}
+
+.menu{position:relative}
+.menu-list{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:6px;min-width:220px;display:none;z-index:30}
+.menu.open .menu-list{display:block}
+.menu-list button{display:flex;width:100%;gap:8px;align-items:center;border:0;background:none;padding:8px 10px;border-radius:7px;cursor:pointer;text-align:left;font-size:14px}
+.menu-list button:hover{background:var(--surface-2)}
+.menu-list hr{border:0;border-top:1px solid var(--border);margin:6px 0}
+
+/* Client strip + tabs */
+.client-strip{padding:22px 0 6px;display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;justify-content:space-between}
+.client-strip h1{font-size:26px}
+.client-meta{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:2px 10px;font-size:12.5px;color:var(--muted)}
+.badge-demo{background:var(--warn-soft);color:var(--warn);border-color:transparent;font-weight:650}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin:14px 0 22px;overflow-x:auto;scrollbar-width:none}
+.tab{border:0;background:none;padding:11px 14px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+.tab:hover{color:var(--text)}
+
+/* Cards */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px 20px;min-width:0}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.grid{display:grid;gap:16px}
+.grid-2{display:grid;gap:16px;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);margin-bottom:16px}
+.stack{display:grid;gap:16px}
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:16px}
+.kpi{padding:16px 18px}
+.kpi .label{font-size:12.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.kpi .value{font-size:28px;font-weight:700;margin-top:4px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.kpi .delta{font-size:12.5px;margin-top:2px;color:var(--muted)}
+.delta.up{color:var(--good)}.delta.down{color:var(--bad)}
+
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+.chart svg{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font-size:11px}
+.chart .grid-line{stroke:var(--border)}
+
+.bars{display:grid;gap:10px}
+.bar-row{display:grid;grid-template-columns:120px minmax(0,1fr) 46px;align-items:center;gap:10px;font-size:13.5px}
+.bar-row .name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-track{background:var(--surface-2);border-radius:999px;height:9px;overflow:hidden}
+.bar-fill{height:100%;border-radius:999px;background:var(--mention)}
+.bar-row .num{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+
+/* Heatmap */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.heat{border-collapse:separate;border-spacing:4px;width:100%;font-size:13px}
+.heat th{font-weight:600;color:var(--muted);text-align:center;font-size:12px;padding:4px;white-space:nowrap}
+.heat th.p{text-align:left;font-weight:500;color:var(--text);max-width:320px;min-width:200px;white-space:normal;font-size:13px}
+.heat td{height:32px;min-width:58px;border-radius:7px;text-align:center;font-size:12px;font-weight:650}
+.h-cited{background:var(--cited);color:#fff}
+.h-mention{background:color-mix(in srgb,var(--mention) 70%,transparent);color:#fff}
+.h-none{background:var(--surface-2);color:var(--faint)}
+.h-empty{border:1px dashed var(--border-strong);color:var(--faint)}
+
+/* Tables */
+table.data{width:100%;border-collapse:collapse;font-size:13.5px}
+table.data th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:650;padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.data td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+table.data tr:last-child td{border-bottom:0}
+table.data td.actions{white-space:nowrap;text-align:right}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:650;white-space:nowrap}
+.pill.yes{background:var(--good-soft);color:var(--good)}
+.pill.no{background:var(--surface-2);color:var(--muted)}
+.pill.cited{background:color-mix(in srgb,var(--cited) 16%,transparent);color:var(--cited)}
+.pill.neg{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters select{font-size:13.5px;padding:6px 8px}
+.url-cell{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Checklist */
+.cl-section{margin-bottom:16px}
+.cl-section .card-head{margin-bottom:6px}
+.cl-item{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:8px 16px;padding:14px 0;border-top:1px solid var(--border)}
+.cl-item:first-of-type{border-top:0}
+.cl-title{font-weight:600}
+.cl-detail{color:var(--muted);font-size:13.5px;margin-top:2px}
+.cl-source{font-size:12.5px;margin-top:4px;display:inline-block}
+.cl-notes{grid-column:1/-1}
+.cl-notes input{width:100%;font-size:13.5px}
+.status-select.s-done{border-color:var(--good);color:var(--good)}
+.status-select.s-progress{border-color:var(--warn);color:var(--warn)}
+.status-select.s-todo{color:var(--muted)}
+.status-select.s-na{color:var(--faint)}
+.score-pill{font-weight:700;font-variant-numeric:tabular-nums}
+.myths{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:var(--radius);padding:16px 20px;margin-bottom:16px}
+.myths ul{margin:8px 0 0;padding-left:20px}
+.myths li{margin:3px 0}
+.ring-wrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.ring-wrap .bars{flex:1;min-width:200px}
+
+.empty{text-align:center;padding:36px 16px;color:var(--muted)}
+.empty strong{display:block;color:var(--text);font-size:16px;margin-bottom:4px}
+.empty .btn{margin-top:12px}
+
+/* Dialog */
+dialog{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);color:var(--text);padding:0;width:min(560px,calc(100vw - 32px));box-shadow:0 20px 60px rgba(0,0,0,.25)}
+dialog::backdrop{background:rgba(10,14,30,.45)}
+.dlg-head{padding:18px 20px 0;display:flex;justify-content:space-between;align-items:center}
+.dlg-body{padding:16px 20px;display:grid;gap:12px;max-height:70vh;overflow:auto}
+.dlg-foot{padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.field{display:grid;gap:5px}
+.field > span{font-size:13px;font-weight:600}
+.field small{color:var(--muted);font-size:12px}
+.field input,.field select{width:100%}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.checks{display:flex;flex-wrap:wrap;gap:8px 16px}
+.checks label{display:inline-flex;align-items:center;gap:6px;font-size:14px}
+.checks input{width:16px;height:16px;accent-color:var(--accent)}
+
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:all .2s;z-index:50;max-width:calc(100vw - 32px)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+footer{padding:28px 0 40px;color:var(--faint);font-size:12.5px}
+.print-only{display:none}
+
+@media (max-width:1000px){.kpis{grid-template-columns:repeat(3,minmax(0,1fr))}.grid-2{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:640px){
+  .wrap{padding:0 16px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi .value{font-size:24px}
+  .brand small{display:none}
+  .client-select{min-width:0;flex:1 1 100%}
+  .toolbar .btn{flex:1;justify-content:center}
+  .toolbar .btn.icon{flex:none}
+  .menu{flex:1;display:flex}
+  .menu > .btn{flex:1}
+  .toolbar{width:100%}
+  .cl-item{grid-template-columns:minmax(0,1fr)}
+  .row-2{grid-template-columns:1fr}
+  .bar-row{grid-template-columns:90px minmax(0,1fr) 42px}
+  .client-strip h1{font-size:22px}
+}
+
+/* Print report */
+@media print{
+  :root,:root[data-theme="dark"]{--bg:#fff;--surface:#fff;--surface-2:#f1f3f8;--border:#dde2ec;--border-strong:#cfd5e2;--text:#0f172a;--muted:#4b5568;--faint:#7a849a;--accent:#4338ca;--mention:#4f46e5;--cited:#0d9488;--shadow:none;color-scheme:light}
+  body{font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .topbar,.tabs,.no-print,footer,.btn,.filters{display:none!important}
+  .print-only{display:block}
+  [data-panel]{display:block!important}
+  [data-panel="prompts"]{display:none!important}
+  .card{box-shadow:none;break-inside:avoid}
+  .cl-notes input{border:0;padding:0}
+  .status-select{border:0;-webkit-appearance:none;appearance:none;padding:0}
+  .kpis{grid-template-columns:repeat(5,1fr)}
+  .grid-2{grid-template-columns:1.4fr 1fr}
+  [data-panel="checklist"]{break-before:page}
+}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <div class="brand">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><circle cx="16" cy="16" r="7" fill="none" stroke="var(--on-accent)" stroke-width="2.5"/><circle cx="16" cy="16" r="2.5" fill="var(--on-accent)"/></svg>
+      <div>GEO Visibility Tracker<small>AI search mentions, citations &amp; readiness</small></div>
+    </div>
+    <div class="toolbar">
+      <label class="sr-only" for="clientSelect">Client</label>
+      <select id="clientSelect" class="client-select"></select>
+      <button class="btn icon" id="editClientBtn" title="Edit client" aria-label="Edit client"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+      <button class="btn" id="addClientBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Client</button>
+      <div class="menu" id="dataMenu">
+        <button class="btn" id="dataMenuBtn" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3Z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>Data</button>
+        <div class="menu-list" role="menu">
+          <button role="menuitem" data-action="print">Print / save PDF report</button>
+          <button role="menuitem" data-action="export-csv">Export checks (CSV)</button>
+          <hr>
+          <button role="menuitem" data-action="export-json">Back up all data (JSON)</button>
+          <button role="menuitem" data-action="import-json">Restore from JSON…</button>
+          <hr>
+          <button role="menuitem" data-action="reset-demo">Reload demo client</button>
+        </div>
+      </div>
+      <button class="btn icon" id="themeBtn" title="Toggle theme" aria-label="Toggle light/dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="client-strip">
+    <div>
+      <div class="print-only small muted" id="printDate"></div>
+      <h1 id="clientName"></h1>
+      <div class="client-meta" id="clientMeta"></div>
+    </div>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button class="tab" role="tab" data-tab="dashboard" aria-selected="true">Dashboard</button>
+    <button class="tab" role="tab" data-tab="prompts" aria-selected="false">Prompts &amp; checks</button>
+    <button class="tab" role="tab" data-tab="checklist" aria-selected="false">Readiness checklist</button>
+  </nav>
+
+  <section data-panel="dashboard" role="tabpanel"></section>
+  <section data-panel="prompts" role="tabpanel" hidden></section>
+  <section data-panel="checklist" role="tabpanel" hidden></section>
+</main>
+
+<footer class="wrap">
+  Data is stored only in this browser (localStorage). Back up regularly via Data → Back up all data. Answers from AI engines vary run to run — one check is a sample, not a ranking.
+</footer>
+
+<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* ---------- Constants ---------- */
+const STORE_KEY = 'geoTracker.v1';
+const THEME_KEY = 'geoTracker.theme';
+const ENGINES = [
+  { id: 'aio',        name: 'Google AI Overviews', short: 'AIO' },
+  { id: 'aimode',     name: 'Google AI Mode',      short: 'AI Mode' },
+  { id: 'chatgpt',    name: 'ChatGPT',             short: 'ChatGPT' },
+  { id: 'perplexity', name: 'Perplexity',          short: 'Perplexity' },
+  { id: 'copilot',    name: 'Microsoft Copilot',   short: 'Copilot' },
+  { id: 'gemini',     name: 'Gemini',              short: 'Gemini' },
+  { id: 'claude',     name: 'Claude',              short: 'Claude' }
+];
+const LANGS = ['EN', 'ES', 'BG'];
+const STATUSES = [
+  { id: 'todo',     label: 'Not done' },
+  { id: 'progress', label: 'In progress' },
+  { id: 'done',     label: 'Done' },
+  { id: 'na',       label: 'N/A' }
+];
+
+const SRC = {
+  aiGuide:   { label: 'Google: AI optimization guide', url: 'https://developers.google.com/search/docs/fundamentals/ai-optimization-guide' },
+  aiFeat:    { label: 'Google: AI features & your website', url: 'https://developers.google.com/search/docs/appearance/ai-features' },
+  gCrawlers: { label: 'Google: common crawlers', url: 'https://developers.google.com/crawling/docs/crawlers-fetchers/google-common-crawlers' },
+  robotsMeta:{ label: 'Google: robots meta tag', url: 'https://developers.google.com/search/docs/crawling-indexing/robots-meta-tag' },
+  helpful:   { label: 'Google: helpful, people-first content', url: 'https://developers.google.com/search/docs/fundamentals/creating-helpful-content' },
+  orgSd:     { label: 'Google: Organization structured data', url: 'https://developers.google.com/search/docs/appearance/structured-data/organization' },
+  lbSd:      { label: 'Google: LocalBusiness structured data', url: 'https://developers.google.com/search/docs/appearance/structured-data/local-business' },
+  sameAs:    { label: 'schema.org: sameAs', url: 'https://schema.org/sameAs' },
+  gUpdates:  { label: 'Google Search Central: updates', url: 'https://developers.google.com/search/updates' },
+  gGenAI:    { label: 'Google: generative AI performance reports', url: 'https://developers.google.com/search/blog/2026/06/gen-ai-performance-reports' },
+  gbp:       { label: 'Google Business Profile', url: 'https://business.google.com/' },
+  bingAI:    { label: 'Bing: AI Performance in Webmaster Tools', url: 'https://blogs.bing.com/webmaster/February-2026/Introducing-AI-Performance-in-Bing-Webmaster-Tools-Public-Preview' },
+  bingGuide: { label: 'Bing Webmaster Guidelines', url: 'https://www.bing.com/webmasters/help/webmasters-guidelines-30fba23a' },
+  indexNow:  { label: 'Bing: IndexNow', url: 'https://www.bing.com/indexnow' },
+  bingPlaces:{ label: 'Bing Places for Business', url: 'https://www.bingplaces.com/' },
+  openai:    { label: 'OpenAI: crawlers', url: 'https://developers.openai.com/api/docs/bots' },
+  pplx:      { label: 'Perplexity: crawlers', url: 'https://docs.perplexity.ai/guides/bots' },
+  anthropic: { label: 'Anthropic: crawlers', url: 'https://support.claude.com/en/articles/8896518-does-anthropic-crawl-the-web-and-how-can-site-owners-block-the-crawler' },
+  cloudflare:{ label: 'Cloudflare: bot solutions', url: 'https://developers.cloudflare.com/bots/' }
+};
+
+const CHECKLIST = [
+  { id: 'index', short: 'Indexability', title: 'Indexability & snippet eligibility', items: [
+    { id: 'idx1', t: 'Priority pages are indexed — confirmed in GSC URL Inspection', d: 'AI Overviews and AI Mode only use pages that are indexed and eligible to show a snippet. HTTP 200 alone is not proof of indexation.', s: SRC.aiFeat },
+    { id: 'idx2', t: 'No noindex, nosnippet or max-snippet:0 on pages you want cited', d: 'Snippet controls also apply to AI features in Google Search.', s: SRC.robotsMeta },
+    { id: 'idx3', t: 'Duplicates consolidated: canonicals, parameters, path variants, templated pages', d: 'Diagnose indexation before tuning on-page scores.', s: SRC.aiFeat }
+  ]},
+  { id: 'bots', short: 'AI crawlers', title: 'AI crawler access', items: [
+    { id: 'bot1', t: 'Googlebot and Bingbot allowed', d: 'Googlebot powers Google Search incl. AI Overviews/AI Mode; Bingbot powers Bing and Copilot.', s: SRC.gCrawlers },
+    { id: 'bot2', t: 'Google-Extended decision documented with the owner', d: 'Google states blocking Google-Extended does not affect Search inclusion or ranking.', s: SRC.gCrawlers },
+    { id: 'bot3', t: 'OAI-SearchBot allowed if ChatGPT search visibility is wanted', d: 'Sites opted out of OAI-SearchBot are not shown in ChatGPT search answers. GPTBot (training) is a separate owner decision.', s: SRC.openai },
+    { id: 'bot4', t: 'PerplexityBot allowed if Perplexity visibility is wanted', d: 'PerplexityBot surfaces and links sites in Perplexity results.', s: SRC.pplx },
+    { id: 'bot5', t: 'Claude-SearchBot / Claude-User / ClaudeBot policy set', d: 'Search, user-initiated fetch and training bots are separate user agents.', s: SRC.anthropic },
+    { id: 'bot6', t: 'CDN / WAF bot rules checked against robots.txt', d: 'A firewall can block a bot that robots.txt allows. robots.txt is not access control.', s: SRC.cloudflare }
+  ]},
+  { id: 'content', short: 'Content', title: 'Content quality & extractability', items: [
+    { id: 'c1', t: 'Non-commodity content on key pages', d: 'First-party data, real photos, process detail, local specifics.', s: SRC.aiGuide },
+    { id: 'c2', t: 'Sections open with a direct, self-contained answer', d: 'House practice for readers and quoting by every engine. Google says no AI-specific writing is required.', s: SRC.aiGuide },
+    { id: 'c3', t: 'Cluster sub-questions covered without scaled long-tail variants', d: 'Cost, how-to, comparisons, local specifics on the right pages. Mass permutations risk scaled content abuse.', s: SRC.aiGuide },
+    { id: 'c4', t: 'Facts, prices and specs are current and dated', d: 'Reliable, people-first content.', s: SRC.helpful }
+  ]},
+  { id: 'entity', short: 'Entity & schema', title: 'Entity clarity & structured data', items: [
+    { id: 'e1', t: 'Consistent brand, service and location naming everywhere', d: 'Site, Google Business Profile, Bing Places and social profiles use the same names and NAP.', s: SRC.orgSd },
+    { id: 'e2', t: 'Organization / LocalBusiness JSON-LD matches visible content', d: 'Structured data must describe what is on the page.', s: SRC.lbSd },
+    { id: 'e3', t: 'sameAs links to official profiles', d: 'Ties the entity to its verified profiles.', s: SRC.sameAs }
+  ]},
+  { id: 'local', short: 'Local', title: 'Local listings', items: [
+    { id: 'l1', t: 'Google Business Profile complete and current', d: 'Categories, services, hours, photos, service area by city.', s: SRC.gbp },
+    { id: 'l2', t: 'Bing Places listing claimed and matching GBP', d: 'Bing local and Copilot answers draw on Bing Places.', s: SRC.bingPlaces }
+  ]},
+  { id: 'bing', short: 'Bing', title: 'Bing', items: [
+    { id: 'b1', t: 'Bing Webmaster Tools verified; guidelines reviewed', d: 'Exact-match keywords in headings and body weigh more on Bing.', s: SRC.bingGuide },
+    { id: 'b2', t: 'IndexNow enabled for content updates', d: 'Notifies Bing of new and changed URLs.', s: SRC.indexNow }
+  ]},
+  { id: 'measure', short: 'Measurement', title: 'Measurement', items: [
+    { id: 'm1', t: 'GSC Performance and generative AI reports reviewed monthly', d: 'AI Overviews/AI Mode traffic is included in GSC Performance.', s: SRC.gGenAI },
+    { id: 'm2', t: 'Bing WMT AI Performance exported monthly', d: 'Citations, cited pages and grounding queries (public preview).', s: SRC.bingAI },
+    { id: 'm3', t: 'GA4 channel group for AI referrals', d: 'chatgpt.com, perplexity.ai, copilot.microsoft.com, gemini.google.com, claude.ai. House practice.', s: null },
+    { id: 'm4', t: 'Fixed prompt panel re-run monthly with date stamps', d: 'This tracker. Same prompts, engines, language and location each run.', s: null }
+  ]}
+];
+
+/* ---------- Utils ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const pct = v => v == null || isNaN(v) ? '—' : Math.round(v * 100) + '%';
+const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
+const monthOf = date => (date || '').slice(0, 7);
+const monthLabel = (m, long) => { if (!m) return ''; const [y, mo] = m.split('-').map(Number); return new Date(y, mo - 1, 1).toLocaleDateString('en-US', { month: long ? 'long' : 'short', year: 'numeric' }); };
+const engineName = id => (ENGINES.find(e => e.id === id) || { name: id }).name;
+const engineShort = id => (ENGINES.find(e => e.id === id) || { short: id }).short;
+const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '';
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2400);
+}
+function download(name, text, type) {
+  const blob = new Blob([text], { type });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+/* ---------- Demo data (fictional) ---------- */
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function demoClient() {
+  const rnd = mulberry32(42);
+  const competitors = ['Summit Roasters', 'Harbor Bean Co.', 'Cedar & Crema'];
+  const prompts = [
+    ['best specialty coffee shop in Portland', 'Local discovery', 'EN', 'Portland, OR'],
+    ['where to buy fresh roasted coffee beans near Seattle', 'Local discovery', 'EN', 'Seattle, WA'],
+    ['coffee shops with good wifi to work from in Tacoma', 'Local discovery', 'EN', 'Tacoma, WA'],
+    ['how to brew pour over coffee at home', 'How-to', 'EN', 'US'],
+    ['light vs dark roast caffeine difference', 'Comparison', 'EN', 'US'],
+    ['coffee subscription Pacific Northwest roasters', 'Commercial', 'EN', 'US'],
+    ['mejor cafetería de especialidad en Portland', 'Local discovery', 'ES', 'Portland, OR'],
+    ['Demo Coffee Co. loyalty program review', 'Brand', 'EN', 'US']
+  ].map(([text, cluster, lang, location]) => ({ id: uid(), text, cluster, lang, location }));
+  const engineBase = { aio: .42, aimode: .36, chatgpt: .30, perplexity: .48, copilot: .26, gemini: .30, claude: .22 };
+  const months = ['2026-07', '2026-08', '2026-09', '2026-10'];
+  const checks = [];
+  months.forEach((m, mi) => {
+    prompts.forEach((p, pi) => {
+      ENGINES.forEach(e => {
+        const lift = mi * 0.07 + (p.cluster === 'Brand' ? .35 : 0) + (p.cluster === 'How-to' ? -.12 : 0);
+        const mentioned = rnd() < Math.min(.95, engineBase[e.id] + lift);
+        const cited = mentioned && rnd() < .55 + mi * .05;
+        const comps = competitors.filter(() => rnd() < .38);
+        checks.push({
+          id: uid(), promptId: p.id, engine: e.id,
+          date: `${m}-${String(3 + (pi % 5)).padStart(2, '0')}`,
+          mentioned, cited,
+          citedUrl: cited ? 'https://democoffee.example/' + ['locations/', 'beans/', 'brew-guides/pour-over/', 'subscriptions/'][pi % 4] : '',
+          position: mentioned ? 1 + Math.floor(rnd() * 5) : null,
+          sentiment: mentioned ? (rnd() < .7 ? 'positive' : rnd() < .85 ? 'neutral' : 'negative') : '',
+          accurate: mentioned ? (rnd() < .8 ? 'yes' : 'partly') : '',
+          competitors: comps, notes: ''
+        });
+      });
+    });
+  });
+  const statuses = ['done', 'done', 'progress', 'todo', 'done', 'progress', 'na', 'todo'];
+  const checklist = {};
+  let i = 0;
+  CHECKLIST.forEach(s => s.items.forEach(it => { checklist[it.id] = { status: statuses[i++ % statuses.length], notes: '' }; }));
+  return { id: 'demo', demo: true, name: 'Demo Coffee Co.', domain: 'democoffee.example', competitors, prompts, checks, checklist };
+}
+
+/* ---------- State ---------- */
+function freshState() { const d = demoClient(); return { version: 1, activeClientId: d.id, clients: [d] }; }
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (s && Array.isArray(s.clients) && s.clients.length) return s;
+  } catch (e) { /* storage unavailable */ }
+  return freshState();
+}
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch (e) { toast('Could not save — browser storage is unavailable. Export a backup.'); }
+}
+let state = load();
+const ui = { tab: 'dashboard', period: null, f: { engine: '', prompt: '', month: '', result: '' } };
+const client = () => state.clients.find(c => c.id === state.activeClientId) || state.clients[0];
+
+/* ---------- Metrics ---------- */
+function monthsOf(c) { return [...new Set(c.checks.map(k => monthOf(k.date)))].filter(Boolean).sort(); }
+function metrics(checks) {
+  const n = checks.length;
+  if (!n) return { n: 0 };
+  const mentioned = checks.filter(k => k.mentioned).length;
+  const cited = checks.filter(k => k.cited).length;
+  const pos = checks.filter(k => k.mentioned && k.position > 0).map(k => +k.position);
+  const compMentions = checks.reduce((a, k) => a + (k.competitors || []).length, 0);
+  return {
+    n, mentionRate: mentioned / n, citeRate: cited / n,
+    avgPos: pos.length ? pos.reduce((a, b) => a + b, 0) / pos.length : null,
+    sov: (mentioned + compMentions) ? mentioned / (mentioned + compMentions) : null
+  };
+}
+function checklistScore(c, section) {
+  const items = section ? section.items : CHECKLIST.flatMap(s => s.items);
+  let total = 0, got = 0;
+  items.forEach(it => {
+    const st = (c.checklist[it.id] || {}).status || 'todo';
+    if (st === 'na') return;
+    total += 1; got += st === 'done' ? 1 : st === 'progress' ? .5 : 0;
+  });
+  return total ? got / total : null;
+}
+
+/* ---------- Header / client ---------- */
+function renderHeader() {
+  const c = client();
+  $('#clientSelect').innerHTML = state.clients.map(x => `<option value="${esc(x.id)}" ${x.id === c.id ? 'selected' : ''}>${esc(x.name)}${x.demo ? ' (demo)' : ''}</option>`).join('');
+  $('#clientName').textContent = c.name;
+  $('#clientMeta').innerHTML = [
+    c.demo ? '<span class="chip badge-demo">Demo data — fictional</span>' : '',
+    c.domain ? `<span class="chip">${esc(c.domain)}</span>` : '',
+    `<span class="chip">${c.prompts.length} prompts</span>`,
+    `<span class="chip">${c.checks.length} checks</span>`,
+    ...(c.competitors || []).map(x => `<span class="chip">vs ${esc(x)}</span>`)
+  ].join('');
+  $('#printDate').textContent = 'GEO visibility report · generated ' + new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  document.title = c.name + ' · GEO Visibility Tracker';
+}
+
+/* ---------- Dashboard ---------- */
+function trendSvg(rows) {
+  const W = 600, H = 230, p = { l: 40, r: 16, t: 14, b: 30 };
+  const iw = W - p.l - p.r, ih = H - p.t - p.b, n = rows.length;
+  const x = i => p.l + (n === 1 ? iw / 2 : i * iw / (n - 1));
+  const y = v => p.t + ih * (1 - v);
+  let g = '';
+  [0, .25, .5, .75, 1].forEach(v => {
+    g += `<line class="grid-line" x1="${p.l}" x2="${W - p.r}" y1="${y(v)}" y2="${y(v)}"/><text x="${p.l - 8}" y="${y(v) + 4}" text-anchor="end">${v * 100}%</text>`;
+  });
+  rows.forEach((r, i) => { g += `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${esc(monthLabel(r.month))}</text>`; });
+  const line = (key, color) => {
+    const pts = rows.map((r, i) => `${x(i)},${y(r[key])}`).join(' ');
+    let s = n > 1 ? `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+    rows.forEach((r, i) => { s += `<circle cx="${x(i)}" cy="${y(r[key])}" r="4.5" fill="var(--surface)" stroke="${color}" stroke-width="2.5"><title>${esc(monthLabel(r.month))}: ${pct(r[key])}</title></circle>`; });
+    return s;
+  };
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Monthly mention and citation rate">${g}${line('mention', 'var(--mention)')}${line('cite', 'var(--cited)')}</svg>`;
+}
+function ringSvg(v) {
+  const r = 46, C = 2 * Math.PI * r, off = C * (1 - (v || 0));
+  return `<svg width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Readiness ${pct(v)}">
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--surface-2)" stroke-width="12"/>
+    <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--accent)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${off}" transform="rotate(-90 60 60)"/>
+    <text x="60" y="66" text-anchor="middle" font-size="22" font-weight="700" fill="var(--text)">${pct(v)}</text></svg>`;
+}
+function kpi(label, value, delta, invert) {
+  let d = '<div class="delta">&nbsp;</div>';
+  if (delta != null && !isNaN(delta)) {
+    const good = invert ? delta < 0 : delta > 0;
+    const cls = delta === 0 ? '' : good ? 'up' : 'down';
+    d = `<div class="delta ${cls}">${delta > 0 ? '▲' : delta < 0 ? '▼' : '•'} ${esc(typeof delta === 'number' && Math.abs(delta) < 1.0001 && !invert ? Math.abs(Math.round(delta * 100)) + ' pts' : Math.abs(delta).toFixed(1))} vs prev. month</div>`;
+  }
+  return `<div class="card kpi"><div class="label">${esc(label)}</div><div class="value">${value}</div>${d}</div>`;
+}
+function renderDashboard() {
+  const c = client(), el = $('[data-panel="dashboard"]');
+  const months = monthsOf(c);
+  if (!c.checks.length) {
+    el.innerHTML = `<div class="card empty"><strong>No checks logged yet</strong>Add the prompts you want to monitor, then log what each AI engine answered.<br><button class="btn primary" data-go="prompts">Go to prompts &amp; checks</button></div>` + readinessCard(c);
+    return;
+  }
+  if (!ui.period || (ui.period !== 'all' && !months.includes(ui.period))) ui.period = months[months.length - 1];
+  const inPeriod = k => ui.period === 'all' || monthOf(k.date) === ui.period;
+  const checks = c.checks.filter(inPeriod);
+  const m = metrics(checks);
+  let prev = null;
+  if (ui.period !== 'all') {
+    const i = months.indexOf(ui.period);
+    if (i > 0) prev = metrics(c.checks.filter(k => monthOf(k.date) === months[i - 1]));
+  }
+  const dl = key => prev && prev.n && m[key] != null && prev[key] != null ? m[key] - prev[key] : null;
+
+  const trend = months.map(mo => { const x = metrics(c.checks.filter(k => monthOf(k.date) === mo)); return { month: mo, mention: x.mentionRate, cite: x.citeRate }; });
+
+  const engineRows = ENGINES.map(e => ({ e, m: metrics(checks.filter(k => k.engine === e.id)) })).filter(r => r.m.n);
+  const engineBars = engineRows.map(r => `<div class="bar-row"><span class="name" title="${esc(r.e.name)}">${esc(r.e.short)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round(r.m.mentionRate * 100)}%"></div></div><span class="num">${pct(r.m.mentionRate)}</span></div>`).join('');
+
+  // Heatmap: latest check per prompt × engine in period
+  const latest = {};
+  checks.forEach(k => { const key = k.promptId + '|' + k.engine; if (!latest[key] || k.date >= latest[key].date) latest[key] = k; });
+  const heatRows = c.prompts.map(p => `<tr><th class="p" scope="row">${esc(p.text)}</th>${ENGINES.map(e => {
+    const k = latest[p.id + '|' + e.id];
+    if (!k) return `<td class="h-empty" title="No check">–</td>`;
+    const cls = k.cited ? 'h-cited' : k.mentioned ? 'h-mention' : 'h-none';
+    const label = k.cited ? 'Cited' : k.mentioned ? 'Mentioned' : 'Not mentioned';
+    return `<td class="${cls}" title="${esc(e.name)} · ${esc(k.date)} · ${label}${k.position ? ' · position ' + k.position : ''}">${k.mentioned && k.position ? '#' + k.position : k.mentioned ? '✓' : '✕'}</td>`;
+  }).join('')}</tr>`).join('');
+
+  // Competitors
+  const brandMentions = checks.filter(k => k.mentioned).length;
+  const compCount = {};
+  checks.forEach(k => (k.competitors || []).forEach(x => { compCount[x] = (compCount[x] || 0) + 1; }));
+  const compRows = [[c.name + ' (you)', brandMentions, true], ...Object.entries(compCount).sort((a, b) => b[1] - a[1]).map(([n, v]) => [n, v, false])];
+  const maxC = Math.max(1, ...compRows.map(r => r[1]));
+  const compBars = compRows.map(([n, v, you]) => `<div class="bar-row"><span class="name" title="${esc(n)}">${esc(n)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round(v / maxC * 100)}%;background:${you ? 'var(--mention)' : 'var(--faint)'}"></div></div><span class="num">${v}</span></div>`).join('');
+
+  el.innerHTML = `
+    <div class="section-head">
+      <h2>Visibility dashboard</h2>
+      <label class="filters no-print"><span class="small muted">Period</span>
+        <select id="period">${[...months].reverse().map(mo => `<option value="${mo}" ${mo === ui.period ? 'selected' : ''}>${esc(monthLabel(mo, true))}</option>`).join('')}<option value="all" ${ui.period === 'all' ? 'selected' : ''}>All time</option></select>
+      </label>
+      <span class="print-only small muted">Period: ${esc(ui.period === 'all' ? 'All time' : monthLabel(ui.period, true))}</span>
+    </div>
+    <div class="kpis">
+      ${kpi('Mention rate', pct(m.mentionRate), dl('mentionRate'))}
+      ${kpi('Citation rate', pct(m.citeRate), dl('citeRate'))}
+      ${kpi('Avg. position', m.avgPos == null ? '—' : m.avgPos.toFixed(1), dl('avgPos'), true)}
+      ${kpi('Share of voice', pct(m.sov), dl('sov'))}
+      ${kpi('Checks', m.n, null)}
+    </div>
+    <div class="grid-2">
+      <div class="card chart">
+        <div class="card-head"><h3>Mention &amp; citation rate by month</h3>
+          <div class="legend"><span><i class="sw" style="background:var(--mention)"></i>Mentioned</span><span><i class="sw" style="background:var(--cited)"></i>Cited with link</span></div></div>
+        ${trendSvg(trend)}
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Mention rate by engine</h3><span class="small muted">${esc(ui.period === 'all' ? 'All time' : monthLabel(ui.period))}</span></div>
+        <div class="bars">${engineBars || '<p class="muted small">No data for this period.</p>'}</div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><h3>Prompt × engine</h3>
+        <div class="legend"><span><i class="sw" style="background:var(--cited)"></i>Cited</span><span><i class="sw" style="background:color-mix(in srgb,var(--mention) 70%,transparent)"></i>Mentioned</span><span><i class="sw" style="background:var(--surface-2);border:1px solid var(--border)"></i>Not mentioned</span><span><i class="sw" style="border:1px dashed var(--border-strong)"></i>No check</span></div></div>
+      <p class="small muted" style="margin:-6px 0 8px">Latest check in the period. “#n” = position of the brand in the answer.</p>
+      <div class="table-wrap"><table class="heat"><thead><tr><th class="p">Prompt</th>${ENGINES.map(e => `<th title="${esc(e.name)}">${esc(e.short)}</th>`).join('')}</tr></thead><tbody>${heatRows || `<tr><td colspan="8" class="muted">No prompts yet.</td></tr>`}</tbody></table></div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-head"><h3>Brands named in answers</h3><span class="small muted">Mentions in period</span></div>
+        <div class="bars">${compBars}</div>
+        <p class="small muted" style="margin:12px 0 0">Share of voice = your mentions ÷ (your mentions + competitor mentions).</p>
+      </div>
+      ${readinessCard(c, true)}
+    </div>`;
+}
+function readinessCard(c, inGrid) {
+  const total = checklistScore(c);
+  const bars = CHECKLIST.map(s => { const v = checklistScore(c, s); return `<div class="bar-row"><span class="name" title="${esc(s.title)}">${esc(s.short)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.round((v || 0) * 100)}%;background:var(--accent)"></div></div><span class="num">${pct(v)}</span></div>`; }).join('');
+  return `<div class="card" ${inGrid ? '' : 'style="margin-top:16px"'}>
+    <div class="card-head"><h3>GEO readiness</h3><button class="btn sm ghost no-print" data-go="checklist">Open checklist →</button></div>
+    <div class="ring-wrap">${ringSvg(total)}<div class="bars">${bars}</div></div></div>`;
+}
+
+/* ---------- Prompts & checks ---------- */
+function renderPrompts() {
+  const c = client(), el = $('[data-panel="prompts"]');
+  const months = monthsOf(c).reverse();
+  const promptById = Object.fromEntries(c.prompts.map(p => [p.id, p]));
+  const f = ui.f;
+  const rows = c.checks.filter(k =>
+    (!f.engine || k.engine === f.engine) && (!f.prompt || k.promptId === f.prompt) &&
+    (!f.month || monthOf(k.date) === f.month) &&
+    (!f.result || (f.result === 'cited' ? k.cited : f.result === 'mentioned' ? k.mentioned : !k.mentioned))
+  ).sort((a, b) => b.date.localeCompare(a.date));
+  const shown = rows.slice(0, 200);
+
+  const promptRows = c.prompts.map(p => {
+    const pc = c.checks.filter(k => k.promptId === p.id), m = metrics(pc);
+    return `<tr><td>${esc(p.text)}</td><td>${esc(p.cluster || '—')}</td><td>${esc(p.lang)}</td><td>${esc(p.location || '—')}</td><td>${m.n ? pct(m.mentionRate) : '—'}</td>
+      <td class="actions"><button class="btn sm" data-log="${esc(p.id)}">Log check</button> <button class="btn sm ghost" data-edit-prompt="${esc(p.id)}" aria-label="Edit prompt">Edit</button> <button class="btn sm ghost danger" data-del-prompt="${esc(p.id)}" aria-label="Delete prompt">Delete</button></td></tr>`;
+  }).join('');
+
+  const sentPill = s => s === 'positive' ? '<span class="pill yes">Positive</span>' : s === 'negative' ? '<span class="pill neg">Negative</span>' : s === 'neutral' ? '<span class="pill no">Neutral</span>' : '—';
+  const accPill = a => a === 'yes' ? '<span class="pill yes">Accurate</span>' : a === 'partly' ? '<span class="pill warn">Partly</span>' : a === 'no' ? '<span class="pill neg">Inaccurate</span>' : '—';
+
+  const checkRows = shown.map(k => {
+    const p = promptById[k.promptId];
+    const url = safeUrl(k.citedUrl);
+    return `<tr><td style="white-space:nowrap">${esc(k.date)}</td><td>${esc(p ? p.text : '(deleted prompt)')}</td><td style="white-space:nowrap">${esc(engineShort(k.engine))}</td>
+      <td>${k.cited ? '<span class="pill cited">Cited</span>' : k.mentioned ? '<span class="pill yes">Mentioned</span>' : '<span class="pill no">No</span>'}</td>
+      <td>${k.position || '—'}</td><td>${sentPill(k.sentiment)}</td><td>${accPill(k.accurate)}</td>
+      <td class="url-cell">${url ? `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="${esc(url)}">${esc(url.replace(/^https?:\/\//, ''))}</a>` : '—'}</td>
+      <td>${(k.competitors || []).map(esc).join(', ') || '—'}</td>
+      <td class="actions"><button class="btn sm ghost" data-edit-check="${esc(k.id)}">Edit</button> <button class="btn sm ghost danger" data-del-check="${esc(k.id)}">Delete</button></td></tr>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-head"><div><h3>Prompt library</h3><p class="small muted" style="margin:2px 0 0">Keep the set fixed and re-run it monthly — same engine, language and location each time.</p></div>
+        <button class="btn primary" id="addPromptBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add prompt</button></div>
+      ${c.prompts.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Prompt</th><th>Cluster</th><th>Lang</th><th>Location</th><th>Mention rate</th><th></th></tr></thead><tbody>${promptRows}</tbody></table></div>`
+        : `<div class="empty"><strong>No prompts yet</strong>Add the questions customers ask AI engines about this client’s services and locations.</div>`}
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Check history</h3>
+        <div class="filters">
+          <select id="fEngine" aria-label="Filter by engine"><option value="">All engines</option>${ENGINES.map(e => `<option value="${e.id}" ${f.engine === e.id ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>
+          <select id="fPrompt" aria-label="Filter by prompt" style="max-width:220px"><option value="">All prompts</option>${c.prompts.map(p => `<option value="${esc(p.id)}" ${f.prompt === p.id ? 'selected' : ''}>${esc(p.text)}</option>`).join('')}</select>
+          <select id="fMonth" aria-label="Filter by month"><option value="">All months</option>${months.map(mo => `<option value="${mo}" ${f.month === mo ? 'selected' : ''}>${esc(monthLabel(mo))}</option>`).join('')}</select>
+          <select id="fResult" aria-label="Filter by result"><option value="">All results</option><option value="cited" ${f.result === 'cited' ? 'selected' : ''}>Cited</option><option value="mentioned" ${f.result === 'mentioned' ? 'selected' : ''}>Mentioned</option><option value="no" ${f.result === 'no' ? 'selected' : ''}>Not mentioned</option></select>
+          <button class="btn" id="logCheckBtn" ${c.prompts.length ? '' : 'disabled'}>Log check</button>
+        </div></div>
+      ${rows.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Date</th><th>Prompt</th><th>Engine</th><th>Result</th><th>Pos.</th><th>Sentiment</th><th>Accuracy</th><th>Cited URL</th><th>Competitors</th><th></th></tr></thead><tbody>${checkRows}</tbody></table></div>
+        <p class="small muted" style="margin:10px 0 0">${rows.length > shown.length ? `Showing ${shown.length} of ${rows.length}. Narrow the filters or export CSV for the full list.` : `${rows.length} check${rows.length === 1 ? '' : 's'}.`}</p>`
+        : `<div class="empty"><strong>No checks match</strong>${c.checks.length ? 'Try clearing the filters.' : 'Run a prompt in an AI engine and log what it answered.'}</div>`}
+    </div>`;
+}
+
+/* ---------- Checklist ---------- */
+function renderChecklist() {
+  const c = client(), el = $('[data-panel="checklist"]');
+  const total = checklistScore(c);
+  el.innerHTML = `
+    <div class="section-head"><div><h2>GEO readiness checklist</h2><p class="small muted" style="margin:4px 0 0">Done = 1, In progress = ½, N/A excluded. Each item links to its primary source.</p></div>
+      <span class="chip score-pill" style="font-size:15px;padding:6px 14px">Overall ${pct(total)}</span></div>
+    <div class="myths">
+      <strong>What Google says is not needed for AI features</strong>
+      <ul class="small">
+        <li>No llms.txt or special AI markup — Google says llms.txt won’t affect visibility either way (<a href="${SRC.gUpdates.url}" target="_blank" rel="noopener">Search Central updates</a>).</li>
+        <li>No “chunking” content or writing in a special way for AI; no special schema for AI features (<a href="${SRC.aiGuide.url}" target="_blank" rel="noopener">AI optimization guide</a>).</li>
+        <li>No mass long-tail variants — that risks scaled content abuse. Optimizing for AI features “is still SEO.”</li>
+      </ul>
+    </div>
+    ${CHECKLIST.map(s => `
+      <div class="card cl-section">
+        <div class="card-head"><h3>${esc(s.title)}</h3><span class="chip score-pill">${pct(checklistScore(c, s))}</span></div>
+        ${s.items.map(it => {
+          const v = c.checklist[it.id] || { status: 'todo', notes: '' };
+          return `<div class="cl-item">
+            <div><div class="cl-title">${esc(it.t)}</div><div class="cl-detail">${esc(it.d)}</div>
+              ${it.s ? `<a class="cl-source" href="${esc(it.s.url)}" target="_blank" rel="noopener noreferrer">${esc(it.s.label)} ↗</a>` : '<span class="cl-source muted">House practice</span>'}</div>
+            <div><label class="sr-only" for="st-${it.id}">Status</label>
+              <select id="st-${it.id}" class="status-select s-${esc(v.status)}" data-status="${it.id}" style="width:100%">${STATUSES.map(st => `<option value="${st.id}" ${st.id === v.status ? 'selected' : ''}>${st.label}</option>`).join('')}</select></div>
+            <div class="cl-notes"><label class="sr-only" for="nt-${it.id}">Notes</label><input type="text" id="nt-${it.id}" data-notes="${it.id}" value="${esc(v.notes)}" placeholder="Notes, evidence, owner…"></div>
+          </div>`;
+        }).join('')}
+      </div>`).join('')}`;
+}
+
+/* ---------- Render ---------- */
+function render() {
+  renderHeader();
+  renderDashboard();
+  renderPrompts();
+  renderChecklist();
+  $$('.tab').forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === ui.tab)));
+  $$('[data-panel]').forEach(p => { p.hidden = p.dataset.panel !== ui.tab; });
+}
+function go(tab) { ui.tab = tab; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+
+/* ---------- Dialogs ---------- */
+const dlg = $('#dlg'), dlgForm = $('#dlgForm');
+let onSubmit = null;
+function openDialog(title, body, submitLabel, handler) {
+  dlgForm.innerHTML = `<div class="dlg-head"><h2 style="font-size:18px">${esc(title)}</h2><button type="button" class="btn icon ghost" data-close aria-label="Close">✕</button></div>
+    <div class="dlg-body">${body}</div>
+    <div class="dlg-foot"><button type="button" class="btn" data-close>Cancel</button><button type="submit" class="btn primary" value="ok">${esc(submitLabel)}</button></div>`;
+  onSubmit = handler;
+  dlg.showModal();
+  const first = dlgForm.querySelector('input,select,textarea'); if (first) first.focus();
+}
+dlgForm.addEventListener('click', e => { if (e.target.closest('[data-close]')) dlg.close(); });
+dlgForm.addEventListener('submit', e => {
+  e.preventDefault();
+  if (!onSubmit) return dlg.close();
+  const data = new FormData(dlgForm);
+  if (onSubmit(data) !== false) { dlg.close(); save(); render(); }
+});
+
+function clientForm(c) {
+  const isNew = !c;
+  c = c || { name: '', domain: '', competitors: [] };
+  openDialog(isNew ? 'Add client' : 'Edit client', `
+    <label class="field"><span>Client name</span><input type="text" name="name" required value="${esc(c.name)}" placeholder="e.g. EventRent Idaho"></label>
+    <label class="field"><span>Domain</span><input type="text" name="domain" value="${esc(c.domain)}" placeholder="example.com"></label>
+    <label class="field"><span>Competitors to watch</span><input type="text" name="competitors" value="${esc((c.competitors || []).join(', '))}" placeholder="Comma-separated"><small>Shown as checkboxes when logging a check.</small></label>
+    ${isNew ? '' : `<div><button type="button" class="btn danger sm" id="delClientBtn">Delete this client</button></div>`}`,
+    isNew ? 'Add client' : 'Save', d => {
+      const name = String(d.get('name')).trim(); if (!name) return false;
+      const fields = { name, domain: String(d.get('domain')).trim().replace(/^https?:\/\//, '').replace(/\/$/, ''), competitors: String(d.get('competitors')).split(',').map(s => s.trim()).filter(Boolean) };
+      if (isNew) {
+        const nc = { id: uid(), demo: false, prompts: [], checks: [], checklist: {}, ...fields };
+        state.clients.push(nc); state.activeClientId = nc.id; ui.period = null; toast('Client added');
+      } else { Object.assign(client(), fields); toast('Client saved'); }
+    });
+  const del = $('#delClientBtn');
+  if (del) del.addEventListener('click', () => {
+    const cur = client();
+    if (!confirm(`Delete “${cur.name}” and all its prompts, checks and checklist notes? This can’t be undone (unless you have a JSON backup).`)) return;
+    state.clients = state.clients.filter(x => x.id !== cur.id);
+    if (!state.clients.length) state.clients.push(demoClient());
+    state.activeClientId = state.clients[0].id; ui.period = null;
+    dlg.close(); save(); render(); toast('Client deleted');
+  });
+}
+
+function promptForm(p) {
+  const isNew = !p;
+  p = p || { text: '', cluster: '', lang: 'EN', location: '' };
+  openDialog(isNew ? 'Add prompt' : 'Edit prompt', `
+    <label class="field"><span>Prompt</span><input type="text" name="text" required value="${esc(p.text)}" placeholder="e.g. party rentals in Boise"><small>Phrase it the way a customer would ask an AI assistant.</small></label>
+    <div class="row-2">
+      <label class="field"><span>Cluster / topic</span><input type="text" name="cluster" value="${esc(p.cluster)}" placeholder="e.g. Local discovery"></label>
+      <label class="field"><span>Language</span><select name="lang">${LANGS.map(l => `<option ${l === p.lang ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    </div>
+    <label class="field"><span>Location tested from</span><input type="text" name="location" value="${esc(p.location)}" placeholder="City, e.g. Fort Collins, CO"></label>`,
+    isNew ? 'Add prompt' : 'Save', d => {
+      const text = String(d.get('text')).trim(); if (!text) return false;
+      const fields = { text, cluster: String(d.get('cluster')).trim(), lang: String(d.get('lang')), location: String(d.get('location')).trim() };
+      if (isNew) client().prompts.push({ id: uid(), ...fields }); else Object.assign(p, fields);
+      toast(isNew ? 'Prompt added' : 'Prompt saved');
+    });
+}
+
+function checkForm(k, presetPromptId) {
+  const c = client(), isNew = !k;
+  k = k || { promptId: presetPromptId || (c.prompts[0] || {}).id, engine: 'aio', date: todayISO(), mentioned: false, cited: false, citedUrl: '', position: '', sentiment: '', accurate: '', competitors: [], notes: '' };
+  const comps = [...new Set([...(c.competitors || []), ...(k.competitors || [])])];
+  openDialog(isNew ? 'Log AI answer check' : 'Edit check', `
+    <label class="field"><span>Prompt</span><select name="promptId" required>${c.prompts.map(p => `<option value="${esc(p.id)}" ${p.id === k.promptId ? 'selected' : ''}>${esc(p.text)}</option>`).join('')}</select></label>
+    <div class="row-2">
+      <label class="field"><span>Engine</span><select name="engine">${ENGINES.map(e => `<option value="${e.id}" ${e.id === k.engine ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select></label>
+      <label class="field"><span>Date</span><input type="date" name="date" required value="${esc(k.date)}"></label>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" name="mentioned" ${k.mentioned ? 'checked' : ''}> Brand mentioned</label>
+      <label><input type="checkbox" name="cited" ${k.cited ? 'checked' : ''}> Cited with a link</label>
+    </div>
+    <label class="field"><span>Cited URL</span><input type="url" name="citedUrl" value="${esc(k.citedUrl)}" placeholder="https://…"></label>
+    <div class="row-2">
+      <label class="field"><span>Position in answer</span><input type="number" name="position" min="1" max="50" value="${esc(k.position || '')}" placeholder="1 = named first"></label>
+      <label class="field"><span>Sentiment</span><select name="sentiment">${[['', '—'], ['positive', 'Positive'], ['neutral', 'Neutral'], ['negative', 'Negative']].map(([v, l]) => `<option value="${v}" ${v === k.sentiment ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    </div>
+    <label class="field"><span>Is the answer about the brand accurate?</span><select name="accurate">${[['', '—'], ['yes', 'Yes'], ['partly', 'Partly'], ['no', 'No']].map(([v, l]) => `<option value="${v}" ${v === k.accurate ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <div class="field"><span>Competitors named</span>
+      ${comps.length ? `<div class="checks">${comps.map(x => `<label><input type="checkbox" name="comp" value="${esc(x)}" ${(k.competitors || []).includes(x) ? 'checked' : ''}> ${esc(x)}</label>`).join('')}</div>` : ''}
+      <input type="text" name="compOther" placeholder="Other competitors, comma-separated"></div>
+    <label class="field"><span>Notes</span><textarea name="notes" placeholder="What the answer said, sources it used…">${esc(k.notes)}</textarea></label>`,
+    isNew ? 'Log check' : 'Save', d => {
+      const cited = d.get('cited') === 'on';
+      const url = String(d.get('citedUrl')).trim();
+      if (url && !safeUrl(url)) { toast('Cited URL must start with http:// or https://'); return false; }
+      const pos = parseInt(d.get('position'), 10);
+      const fields = {
+        promptId: String(d.get('promptId')), engine: String(d.get('engine')), date: String(d.get('date')) || todayISO(),
+        mentioned: d.get('mentioned') === 'on' || cited, cited, citedUrl: url,
+        position: pos > 0 ? pos : null, sentiment: String(d.get('sentiment')), accurate: String(d.get('accurate')),
+        competitors: [...new Set([...d.getAll('comp').map(String), ...String(d.get('compOther')).split(',').map(s => s.trim()).filter(Boolean)])],
+        notes: String(d.get('notes')).trim()
+      };
+      fields.competitors.forEach(x => { if (!c.competitors.includes(x)) c.competitors.push(x); });
+      if (isNew) c.checks.push({ id: uid(), ...fields }); else Object.assign(k, fields);
+      ui.period = monthOf(fields.date);
+      toast(isNew ? 'Check logged' : 'Check saved');
+    });
+}
+
+/* ---------- Import / export ---------- */
+function exportCSV() {
+  const c = client();
+  const promptById = Object.fromEntries(c.prompts.map(p => [p.id, p]));
+  const cell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+  const head = ['client', 'date', 'prompt', 'cluster', 'language', 'location', 'engine', 'mentioned', 'cited', 'cited_url', 'position', 'sentiment', 'accurate', 'competitors', 'notes'];
+  const lines = c.checks.slice().sort((a, b) => a.date.localeCompare(b.date)).map(k => {
+    const p = promptById[k.promptId] || {};
+    return [c.name, k.date, p.text, p.cluster, p.lang, p.location, engineName(k.engine), k.mentioned ? 'yes' : 'no', k.cited ? 'yes' : 'no', k.citedUrl, k.position ?? '', k.sentiment, k.accurate, (k.competitors || []).join('; '), k.notes].map(cell).join(',');
+  });
+  download(`${c.name.replace(/[^\w-]+/g, '-').toLowerCase()}-geo-checks-${todayISO()}.csv`, '﻿' + [head.join(','), ...lines].join('\n'), 'text/csv;charset=utf-8');
+}
+function importJSON(file) {
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const s = JSON.parse(r.result);
+      if (!s || !Array.isArray(s.clients) || !s.clients.length) throw new Error('No clients found');
+      s.clients.forEach(c => {
+        if (!c.id || !c.name) throw new Error('Client missing id or name');
+        c.prompts = Array.isArray(c.prompts) ? c.prompts : [];
+        c.checks = Array.isArray(c.checks) ? c.checks : [];
+        c.competitors = Array.isArray(c.competitors) ? c.competitors : [];
+        c.checklist = c.checklist && typeof c.checklist === 'object' ? c.checklist : {};
+      });
+      if (!confirm(`Replace all current data with ${s.clients.length} client(s) from this file?`)) return;
+      if (!s.clients.some(c => c.id === s.activeClientId)) s.activeClientId = s.clients[0].id;
+      state = s; ui.period = null; save(); render(); toast('Data restored');
+    } catch (e) { toast('Import failed: ' + e.message); }
+  };
+  r.readAsText(file);
+}
+
+/* ---------- Events ---------- */
+document.addEventListener('click', e => {
+  const t = e.target;
+  const menu = $('#dataMenu');
+  if (t.closest('#dataMenuBtn')) { const open = menu.classList.toggle('open'); $('#dataMenuBtn').setAttribute('aria-expanded', String(open)); return; }
+  if (!t.closest('#dataMenu')) { menu.classList.remove('open'); $('#dataMenuBtn').setAttribute('aria-expanded', 'false'); }
+
+  const act = t.closest('[data-action]');
+  if (act) {
+    menu.classList.remove('open');
+    const a = act.dataset.action;
+    if (a === 'print') { const prev = ui.tab; ui.tab = 'dashboard'; render(); setTimeout(() => { window.print(); ui.tab = prev; render(); }, 50); }
+    if (a === 'export-csv') { if (!client().checks.length) return toast('No checks to export'); exportCSV(); }
+    if (a === 'export-json') download(`geo-tracker-backup-${todayISO()}.json`, JSON.stringify(state, null, 2), 'application/json');
+    if (a === 'import-json') $('#importFile').click();
+    if (a === 'reset-demo') {
+      if (!confirm('Reset the demo client to its original sample data? Your other clients are not affected.')) return;
+      const d = demoClient(), i = state.clients.findIndex(c => c.demo);
+      if (i >= 0) state.clients[i] = d; else state.clients.unshift(d);
+      state.activeClientId = d.id; ui.period = null; save(); render(); toast('Demo client reloaded');
+    }
+    return;
+  }
+  const tab = t.closest('.tab'); if (tab) return go(tab.dataset.tab);
+  const goBtn = t.closest('[data-go]'); if (goBtn) return go(goBtn.dataset.go);
+  if (t.closest('#addClientBtn')) return clientForm();
+  if (t.closest('#editClientBtn')) return clientForm(client());
+  if (t.closest('#addPromptBtn')) return promptForm();
+  if (t.closest('#logCheckBtn')) return checkForm(null, ui.f.prompt || null);
+
+  const c = client();
+  const b = t.closest('[data-log],[data-edit-prompt],[data-del-prompt],[data-edit-check],[data-del-check]');
+  if (!b) return;
+  if (b.dataset.log) return checkForm(null, b.dataset.log);
+  if (b.dataset.editPrompt) return promptForm(c.prompts.find(p => p.id === b.dataset.editPrompt));
+  if (b.dataset.delPrompt) {
+    const p = c.prompts.find(x => x.id === b.dataset.delPrompt); if (!p) return;
+    const n = c.checks.filter(k => k.promptId === p.id).length;
+    if (!confirm(`Delete prompt “${p.text}”${n ? ` and its ${n} logged check${n === 1 ? '' : 's'}` : ''}?`)) return;
+    c.prompts = c.prompts.filter(x => x.id !== p.id); c.checks = c.checks.filter(k => k.promptId !== p.id);
+    if (ui.f.prompt === p.id) ui.f.prompt = '';
+    save(); render(); toast('Prompt deleted'); return;
+  }
+  if (b.dataset.editCheck) return checkForm(c.checks.find(k => k.id === b.dataset.editCheck));
+  if (b.dataset.delCheck) {
+    if (!confirm('Delete this check?')) return;
+    c.checks = c.checks.filter(k => k.id !== b.dataset.delCheck); save(); render(); toast('Check deleted');
+  }
+});
+
+document.addEventListener('change', e => {
+  const t = e.target;
+  if (t.id === 'clientSelect') { state.activeClientId = t.value; ui.period = null; ui.f = { engine: '', prompt: '', month: '', result: '' }; save(); render(); return; }
+  if (t.id === 'period') { ui.period = t.value; renderDashboard(); return; }
+  if (t.id === 'importFile') { if (t.files[0]) importJSON(t.files[0]); t.value = ''; return; }
+  const fmap = { fEngine: 'engine', fPrompt: 'prompt', fMonth: 'month', fResult: 'result' };
+  if (fmap[t.id]) { ui.f[fmap[t.id]] = t.value; renderPrompts(); return; }
+  if (t.dataset.status) {
+    const c = client(); c.checklist[t.dataset.status] = { ...(c.checklist[t.dataset.status] || { notes: '' }), status: t.value };
+    save(); renderChecklist(); renderDashboard(); $(`#st-${t.dataset.status}`)?.focus(); return;
+  }
+  if (t.dataset.notes) {
+    const c = client(); c.checklist[t.dataset.notes] = { ...(c.checklist[t.dataset.notes] || { status: 'todo' }), notes: t.value };
+    save();
+  }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') $('#dataMenu').classList.remove('open'); });
+
+/* ---------- Theme ---------- */
+function applyTheme(t) { if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); }
+let theme = null;
+try { theme = localStorage.getItem(THEME_KEY); } catch (e) { /* ignore */ }
+applyTheme(theme);
+$('#themeBtn').addEventListener('click', () => {
+  const dark = theme ? theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  theme = dark ? 'light' : 'dark'; applyTheme(theme);
+  try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* ignore */ }
+});
+
+render();
+})();
+</script>
+</body>
+</html>
